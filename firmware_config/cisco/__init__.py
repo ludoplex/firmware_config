@@ -10,7 +10,7 @@ class CiscoFirmwareConfig(FirmwareConfig):
 
     def cisco_firmware_request(self, data):
         xmldata = etree.tostring(data)
-        req = urllib2.Request("https://%s/nuova" % self.host, xmldata)
+        req = urllib2.Request(f"https://{self.host}/nuova", xmldata)
         response = urllib2.urlopen(req)
         return etree.fromstring(response.read())
 
@@ -107,8 +107,6 @@ class CiscoFirmwareConfig(FirmwareConfig):
         return options
 
     def set_boot_options(self, options):
-        order = 1
-
         if options == "platform-default":
             return
 
@@ -123,8 +121,20 @@ class CiscoFirmwareConfig(FirmwareConfig):
         config.append(inconfig)
         inconfig.append(lsbootdef)
 
-        for option in options:
-            if option == "lan":
+        for order, option in enumerate(options, start=1):
+            if option == "efi":
+                efi = etree.Element('lsbootEfi', rn='efi-read-only',
+                                    access="read-only", type='efi',
+                                    order=str(order))
+                lsbootdef.append(efi)
+            elif option == "hdd":
+                hdd = etree.Element('lsbootStorage', rn='storage-read-write',
+                                    access='read-write', type='storage',
+                                    order=str(order))
+                local = etree.Element('lsbootLocalStorage', rn='local-storage')
+                hdd.append(local)
+                lsbootdef.append(hdd)
+            elif option == "lan":
                 lan = etree.Element('lsbootLan', rn="lan-read-only",
                                     access="read-only", prot="pxe", type="lan",
                                     order=str(order))
@@ -139,20 +149,6 @@ class CiscoFirmwareConfig(FirmwareConfig):
                                     access="read-write", type="virtual-media",
                                     order=str(order))
                 lsbootdef.append(fdd)
-            elif option == "hdd":
-                hdd = etree.Element('lsbootStorage', rn='storage-read-write',
-                                    access='read-write', type='storage',
-                                    order=str(order))
-                local = etree.Element('lsbootLocalStorage', rn='local-storage')
-                hdd.append(local)
-                lsbootdef.append(hdd)
-            elif option == "efi":
-                efi = etree.Element('lsbootEfi', rn='efi-read-only',
-                                    access="read-only", type='efi',
-                                    order=str(order))
-                lsbootdef.append(efi)
-            order += 1
-
         response = self.cisco_firmware_request(config)
         self.cisco_logout()
 
@@ -182,10 +178,11 @@ class CiscoFirmwareConfig(FirmwareConfig):
                 continue
 
             changes = True
-            setting = etree.Element(options[option]['cisco_tag'],
-                                    dn="sys/rack-unit-1/bios/bios-settings/%s"
-                                    % options[option]['cisco_rn'])
-            setting.set("vp%s" % option, options[option]['new_value'])
+            setting = etree.Element(
+                options[option]['cisco_tag'],
+                dn=f"sys/rack-unit-1/bios/bios-settings/{options[option]['cisco_rn']}",
+            )
+            setting.set(f"vp{option}", options[option]['new_value'])
             biossettings.append(setting)
 
             options[option]['pending'] = options[option]['new_value']
@@ -224,7 +221,4 @@ class CiscoFirmwareConfig(FirmwareConfig):
 
         self.cisco_logout()
 
-        if response.get("response") != "yes":
-            return False
-
-        return True
+        return response.get("response") == "yes"

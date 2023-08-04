@@ -54,7 +54,7 @@ def BuildHuffmanTree(huffsyms):
 			lr = huffcode & (1 << (bitlen - bit - 1)) != 0
 
 			if bit < bitlen - 1:
-				if huffsubtree[lr] == None:
+				if huffsubtree[lr] is None:
 					huffsubtree[lr] = [None, None]
 				huffsubtree = huffsubtree[lr]
 			else:
@@ -112,7 +112,7 @@ def LoadCharLenHuffmanSyms(bits, extra_hufftree):
 
 
 def Decompress(buf):
-	(compressed_size, decompressed_size) =  struct.unpack("<II", buf[0:8])
+	(compressed_size, decompressed_size) = struct.unpack("<II", buf[:8])
 	bits = BitArray.BitArray(buf[8:])
 
 	outbuf = ''

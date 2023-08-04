@@ -4,10 +4,12 @@ from firmware_config import FirmwareConfig
 
 
 def generate_dell_selectors(name):
-    return { "Name": "DCIM:%sService" % name,
-             "SystemName": "DCIM:ComputerSystem",
-             "SystemCreationClassName": "DCIM_ComputerSystem",
-             "CreationClassName": "DCIM_%sService" % name }
+    return {
+        "Name": f"DCIM:{name}Service",
+        "SystemName": "DCIM:ComputerSystem",
+        "SystemCreationClassName": "DCIM_ComputerSystem",
+        "CreationClassName": f"DCIM_{name}Service",
+    }
 
 
 def set_dell_selectors(client_options, selectors):
@@ -24,9 +26,9 @@ def set_power_selectors(client_options):
 
 
 def generate_xml(method, schema, content):
-    xml = '''<p:%s_INPUT xmlns:p="%s">''' % (method, schema)
+    xml = f'''<p:{method}_INPUT xmlns:p="{schema}">'''
     xml += content
-    xml += '''</p:%s_INPUT>''' % method
+    xml += f'''</p:{method}_INPUT>'''
 
     return xml
 
@@ -63,7 +65,7 @@ class DellFirmwareConfig(FirmwareConfig):
                 pendingpos = boot_option.find(None, "PendingAssignedSequence").__str__()
                 pendingenabled = boot_option.find(None, "PendingEnabledStatus").__str__()
                 boot_id = boot_option.find(None, "InstanceID").__str__()
-                name = "BootOrder" + boot_type
+                name = f"BootOrder{boot_type}"
                 if name not in options:
                     options[name] = dict(current=[], default="", possible=[],
                                          pending=[], new_value=None, dell_id={},
@@ -82,7 +84,7 @@ class DellFirmwareConfig(FirmwareConfig):
             except AttributeError:
                 break
 
-        for name in options.keys():
+        for name in options:
             for i in range(len(options[name]['dell_pending'])):
                 label = options[name]['dell_pending'][str(i)]
                 if options[name]['dell_pendingenabled'][label] == "1":
@@ -90,8 +92,8 @@ class DellFirmwareConfig(FirmwareConfig):
         return options
 
     def get_options(self, name):
-        schema = "http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/root/dcim/DCIM_%sEnumeration" % name
-        tag = "DCIM_%sEnumeration" % name
+        schema = f"http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/root/dcim/DCIM_{name}Enumeration"
+        tag = f"DCIM_{name}Enumeration"
         options = {}
 
         client = self.get_dell_client()
@@ -122,19 +124,16 @@ class DellFirmwareConfig(FirmwareConfig):
                 if group_name == "None":
                     group_name = ""
                     dell_name = attribute_name
-                    option_name = "%s.%s" % (name, attribute_name)
+                    option_name = f"{name}.{attribute_name}"
                 else:
-                    if name == "BIOS" or name == "NIC":
+                    if name in ["BIOS", "NIC"]:
                         dell_name = attribute_name
                     else:
-                        dell_name = "%s#%s" % (group_name, attribute_name)
+                        dell_name = f"{group_name}#{attribute_name}"
                     if name == "NIC":
-                        option_name = "%s.%s.%s" % (name, fqdd,
-                                                    attribute_name)
+                        option_name = f"{name}.{fqdd}.{attribute_name}"
                     else:
-                        option_name = "%s.%s.%s" % (name,
-                                                    group_name,
-                                                    attribute_name)
+                        option_name = f"{name}.{group_name}.{attribute_name}"
 
                 possible_values = []
                 possible = firmware_option.find(None, "PossibleValues")
@@ -164,11 +163,13 @@ class DellFirmwareConfig(FirmwareConfig):
         nic_options = self.get_options("NIC")
         boot_options = self.get_boot_options()
 
-        # Merge with the boot options
-        options = dict(host_options.items() + lc_options.items() +
-                       idrac_options.items() + nic_options.items() +
-                       boot_options.items())
-        return options
+        return dict(
+            host_options.items()
+            + lc_options.items()
+            + idrac_options.items()
+            + nic_options.items()
+            + boot_options.items()
+        )
 
     def wait_for_jobs(self, jobs):
         client = self.get_dell_client()
@@ -253,9 +254,9 @@ class DellFirmwareConfig(FirmwareConfig):
             for boot in options[option]['new_value']:
                 boot_id = options[option]['dell_id'][boot]
                 enabled = options[option]['dell_enabled'][boot]
-                xml += "<p:source>%s</p:source>" % boot_id
+                xml += f"<p:source>{boot_id}</p:source>"
                 enable_xml += "<p:EnabledState>1</p:EnabledState>"
-                enable_xml += "<p:source>%s</p:source>" % boot_id
+                enable_xml += f"<p:source>{boot_id}</p:source>"
 
         if not changes:
             return True
@@ -435,14 +436,11 @@ class DellFirmwareConfig(FirmwareConfig):
 
         status = result.root().find(None, "ReturnValue").__str__()
 
-        if status == '0':
-            return True
-
-        return False
+        return status == '0'
 
     def really_apply_settings(self, type, target):
         xml = ""
-        schema = "http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/root/dcim/DCIM_%sService" % type
+        schema = f"http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/root/dcim/DCIM_{type}Service"
         method = "CreateTargetedConfigJob"
         client = self.get_dell_client()
 
@@ -465,7 +463,7 @@ class DellFirmwareConfig(FirmwareConfig):
 
         status = result.root().find(None, "ReturnValue").__str__()
 
-        if status == '0' or status == '4096':
+        if status in ['0', '4096']:
             selector = result.root().find(None, "Selector")
             while selector:
                 attr = selector.attr_find(None, 'Name')
@@ -485,7 +483,7 @@ class DellFirmwareConfig(FirmwareConfig):
 
         for option in options:
             if not options[option]['new_value'] and \
-               not options[option]['pending']:
+                   not options[option]['pending']:
                 continue
             if options[option]['dell_fqdd'] not in fqdds:
                 fqdd = options[option]['dell_fqdd']
@@ -493,7 +491,7 @@ class DellFirmwareConfig(FirmwareConfig):
                 fqdds[fqdd] = schema
 
         for fqdd in fqdds:
-            if fqdds[fqdd] == "LC" or fqdds[fqdd] == "iDRAC":
+            if fqdds[fqdd] in ["LC", "iDRAC"]:
                 continue
             job = self.really_apply_settings(fqdds[fqdd], fqdd)
             if job is None:
@@ -511,7 +509,9 @@ class DellFirmwareConfig(FirmwareConfig):
             self.force_reboot()
 
     def get_dell_client(self):
-        client = pywsman.Client("https://%s:%s@%s:443/wsman" % (self.user, self.password, self.host))
+        client = pywsman.Client(
+            f"https://{self.user}:{self.password}@{self.host}:443/wsman"
+        )
 
         client.transport().set_verify_host(0)
         client.transport().set_verify_peer(0)

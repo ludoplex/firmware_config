@@ -74,7 +74,7 @@ class IBMFirmwareConfig(FirmwareConfig):
             data += [0x00]
 
         while retries:
-            retries = retries-1
+            retries -= 1
             response = self.connection.raw_command(netfn=IMM_NETFN,
                                                    command=IMM_COMMAND,
                                                    data=data)
@@ -90,8 +90,7 @@ class IBMFirmwareConfig(FirmwareConfig):
 
         filehandle = ''.join(chr(byte) for byte in response['data'][3:7])
 
-        filehandle = struct.unpack("<I", filehandle)[0]
-        return filehandle
+        return struct.unpack("<I", filehandle)[0]
 
     def imm_close(self, filehandle):
         data = []
@@ -122,10 +121,7 @@ class IBMFirmwareConfig(FirmwareConfig):
             hex_offset = struct.pack("<I", offset)
             for byte in hex_offset[:4]:
                 data += [ord(byte)]
-            if remaining < blocksize:
-                amount = remaining
-            else:
-                amount = blocksize
+            amount = min(remaining, blocksize)
             for byte in inputdata[offset:offset+amount]:
                 data += [ord(byte)]
             remaining -= blocksize
@@ -179,7 +175,7 @@ class IBMFirmwareConfig(FirmwareConfig):
 
     def get_fw_options(self):
         options = {}
-        for i in range(0, 10):
+        for _ in range(0, 10):
             self.imm_connect(self.host, self.user, self.password)
             filehandle = self.imm_open("config.efi")
             size = self.imm_size("config.efi")
@@ -223,7 +219,7 @@ class IBMFirmwareConfig(FirmwareConfig):
                             default = label
                         if choice.get("reset-required") == "true":
                             reset = True
-                    optionname = "%s.%s" % (ibm_id, name)
+                    optionname = f"{ibm_id}.{name}"
                     options[optionname] = dict(current=current,
                                                default=default,
                                                possible=possible,
@@ -272,11 +268,9 @@ class IBMFirmwareConfig(FirmwareConfig):
 
             if is_list:
                 container = etree.Element('list_data')
-                setting.append(container)
             else:
                 container = etree.Element('enumerate_data')
-                setting.append(container)
-
+            setting.append(container)
             for value in options[option]['new_value']:
                 choice = etree.Element('choice')
                 container.append(choice)
